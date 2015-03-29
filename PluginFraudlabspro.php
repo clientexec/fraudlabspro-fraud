@@ -1,6 +1,7 @@
 <?php
 
 require_once 'modules/admin/models/FraudPlugin.php';
+require_once 'library/CE/RestRequest.php';
 
 class PluginFraudlabspro extends FraudPlugin
 {
@@ -17,9 +18,9 @@ class PluginFraudlabspro extends FraudPlugin
                 'description'   => lang('Setting allows FraudLabs Pro customers to check orders for fraud.'),
                 'value'         => '0',
             ),
-            lang('MaxMind License Key')       => array(
+            lang('API Key')       => array(
                 'type'          => 'text',
-                'description'   => lang('Enter your MaxMind License Key here.<br>You can obtain a license at <br><a href=http://www.maxmind.com/app/ccv_buynow?rId=clientexec target=_blank>http://www.maxmind.com/app/ccv_buynow</a>'),
+                'description'   => lang('Enter your API Key here.<br>You can obtain a license at <a href="http://www.fraudlabspro.com/?ref=1614" target="_blank">https://www.fraudlabspro.com/</a>'),
                 'value'         => '',
             ),
             lang('Reject Free E-mail Service')       => array(
@@ -63,7 +64,7 @@ class PluginFraudlabspro extends FraudPlugin
                 'value'         => '1',
             ),
         );
-    
+
         return $variables;
     }
 
@@ -95,111 +96,73 @@ class PluginFraudlabspro extends FraudPlugin
         $result = $this->db->query($query);
         list($tPhoneNumberID) = $result->fetch();
 
-        $this->input["license_key"] = $this->settings->get('plugin_maxmind_MaxMind License Key');
-        $this->input["i"] = $ip;                                                    // set the client ip address
-        $this->input["city"] = $request['CT_'.$tCityID];                            // set the billing city
-        $this->input["region"] = $request['CT_'.$tStateID];                         // set the billing state
-        $this->input["postal"] = $request['CT_'.$tZipcodeID];                       // set the billing zip code
-        $this->input["country"] = $request['CT_'.$tCountryID];                      // set the billing country
-        $this->input["domain"] = mb_substr(strstr($request['CT_'.$tEmailID],'@'),1);
-        $this->input["custPhone"] = $request['CT_'.$tPhoneNumberID];
-        $this->input["emailMD5"] = $request['CT_'.$tEmailID];
+        $this->input["ip"] = $ip;
+        $this->input["city"] = $request['CT_'.$tCityID];
+        $this->input["region"] = $request['CT_'.$tStateID];
+        $this->input["postal"] = $request['CT_'.$tZipcodeID];
+        $this->input["country"] = $request['CT_'.$tCountryID];
+        $this->input["emailDomain"] = mb_substr(strstr($request['CT_'.$tEmailID],'@'),1);
+        $this->input["phone"] = $request['CT_'.$tPhoneNumberID];
+        $this->input["email"] = $request['CT_'.$tEmailID];
 
-        if (!is_null($this->settings->get("plugin_".@$_REQUEST['paymentMethod']."_Accept CC Number")) 
+        if (!is_null($this->settings->get("plugin_".@$_REQUEST['paymentMethod']."_Accept CC Number"))
                 && $this->settings->get("plugin_".@$_REQUEST['paymentMethod']."_Accept CC Number")) {
             $this->input["bin"] = mb_substr(@$_REQUEST[@$_REQUEST['paymentMethod'].'_ccNumber'],0,6);
-        }
-        $this->input["usernameMD5"] = md5(strtolower($request['CT_'.$tEmailID]));
-        if (isset($request['new_password'])) {
-            $this->input["passwordMD5"] = md5(strtolower($_REQUEST['password']));
         }
     }
 
     function execute()
     {
-        // this can take a while
-        @set_time_limit(0);
+        $params['format']           = 'json';
+        $params['ip']               = $_SERVER['REMOTE_ADDR'];
+        $params['bill_city']        = $this->input['city'];
+        $params['bill_state']       = $this->input['region'];
+        $params['bill_zip_code']    = $this->input['postal'];
+        $params['bill_country']     = $this->input['country'];
+        $params['email_domain']     = $this->input['emailDomain'];
+        $params['user_phone']       = $this->input['phone'];
+        $params['email_hash']       = $this->hash($this->input['email']);
+        if ( isset($this->input['bin']) ) {
+            $params['bin_no']       = $this->input['bin'];
+        }
+        $params['session_id']       = session_id();
 
-        $ccfs = new CreditCardFraudDetection;
-        $ccfs->isSecure = 0;
-        $ccfs->timeout = 5;
-        $ccfs->input($this->input);
-        $ccfs->query();
-        $this->result = $ccfs->output();
-
+        $this->result = $this->makeRequest($params);
         return $this->result;
     }
 
-    function extraSteps()
+    function makeRequest($params)
     {
-        // Only send a warning notification when number of queries matches the threshold to prevent sending the notification every time!
-        if ($this->settings->get('plugin_maxmind_MaxMind Warning E-mail') != ''
-            && $this->settings->get('plugin_maxmind_MaxMind Low Query Threshold') == $this->result['queriesRemaining'])
-        {
-            $mailGateway = new NE_MailGateway();
-            $destinataries = explode("\r\n", $this->settings->get('MaxMind Warning E-mail'));
-            foreach ($destinataries as $destinatary) {
-                $mailGateway->mailMessageEmail( $this->user->lang("Dear Support Member") . ",\r\n\r\n"
-                        . sprintf($this->user->lang('This is a warning notification that your remaining MaxMind queries has reached your threshold of %s.'), $this->settings->get('MaxMind Low Query Threshold'))
-                        . "\r\n\r\n"
-                        . $this->user->lang('Thank you')
-                        . ",\r\nClientExec",
-                    $this->settings->get('Support E-mail'),
-                    $this->settings->get('Support E-mail'),
-                    $destinatary,
-                    0,
-                    $this->user->lang("WARNING: Low MaxMind Queries"));
-            }
+        $apiKey = $this->settings->get('plugin_fraudlabspro_API Key');
+
+        $query = '';
+        foreach ( $params as $key => $value ) {
+            $query .= '&' . $key . '=' . rawurlencode($value);
         }
+        try {
+            $request = new RestRequest('https://api.fraudlabspro.com/v1/order/screen?key=' . $apiKey . $query, 'GET');
+            $request->execute();
+            $result = $request->getResponseBody();
+        } catch ( Exception $e ) {
+            CE_Lib::log(1, 'Could not look up fraudlabspro order: ' . $e->getMessage());
+        }
+        return json_decode($result, true);
     }
 
-    function isOrderAccepted()
+    function hash($s)
     {
-        if ($this->settings->get('plugin_maxmind_MaxMind Fraud Risk Score') != 'none') {
-            $tUserScore = floatval($this->settings->get('plugin_maxmind_MaxMind Fraud Risk Score'));
-            $tScore = floatval($this->getRiskScore());
-
-            if ($tScore>=$tUserScore) {
-                $this->failureMessages[] = $this->user->lang('Your overall risk is too high, please contact our sales office for more information');
-                return false;
-            }
+        $hash = 'fraudlabspro_' . $s;
+        for($i=0; $i<65536; $i++) {
+            $hash = sha1('fraudlabspro_' . $hash);
         }
+        return $hash;
+    }
 
-        if (    isset($this->result['highRiskCountry'])
-                && $this->result['highRiskCountry'] =="Yes"
-                && $this->settings->get('plugin_maxmind_Reject High Risk Country') == 1)
-        {
-            $this->failureMessages[] = $this->user->lang('Sorry we are not accepting orders from your country');
-        }
-
-        if (    isset($this->result['countryMatch'])
-                && $this->result['countryMatch'] =="No"
-                && $this->settings->get('plugin_maxmind_Reject Country Mismatch') == 1)
-        {
-            $this->failureMessages[] = $this->user->lang('Your country does not match the IP you are currently signing up from');
-        }
-
-        if (    isset($this->result['freeMail'])
-                && $this->result['freeMail'] =="Yes"
-                && $this->settings->get('plugin_maxmind_Reject Free E-mail Service') == 1)
-        {
-            $this->failureMessages[] = $this->user->lang('We do not accept signups from free E-mail services');
-        }
-
-        if (    isset($this->result['anonymousProxy'])
-                && $this->result['anonymousProxy'] =="Yes"
-                && $this->settings->get('plugin_maxmind_Reject Anonymous Proxy') == 1)
-        {
-            $this->failureMessages[] = $this->user->lang('We do not accept signups from anonymous proxy servers');
-        }
-
-        if ($this->failureMessages) {
+    public function isOrderAccepted()
+    {
+        if ( $this->result['fraudlabspro_status'] == 'REJECT' ) {
             return false;
         }
-
         return true;
     }
 }
-
-
-?>
