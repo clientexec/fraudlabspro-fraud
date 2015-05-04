@@ -22,47 +22,7 @@ class PluginFraudlabspro extends FraudPlugin
                 'type'          => 'text',
                 'description'   => lang('Enter your API Key here.<br>You can obtain a license at <a href="http://www.fraudlabspro.com/?ref=1614" target="_blank">https://www.fraudlabspro.com/</a>'),
                 'value'         => '',
-            ),
-            lang('Reject Free E-mail Service')       => array(
-                'type'          => 'yesno',
-                'description'   => lang('Setting allows you to reject any order using free E-mail services like Hotmail and Yahoo (free E-mail = higher risk).<br><b>NOTE: </b>Requires MaxMind'),
-                'value'         => '0',
-            ),
-            lang('Reject Country Mismatch')       => array(
-                'type'          => 'yesno',
-                'description'   => lang('Setting allows you to reject any order where country of IP address does not match the billing address country (mismatch = higher risk).<br><b>NOTE: </b>Requires MaxMind'),
-                'value'         => '1',
-            ),
-            lang('Reject Anonymous Proxy')       => array(
-                'type'          => 'yesno',
-                'description'   => lang('Setting allows you to reject any order where the IP address is an Anonymous Proxy (anonymous proxy = very high risk).<br><b>NOTE: </b>Requires MaxMind'),
-                'value'         => '1',
-            ),
-            lang('Reject High Risk Country')       => array(
-                'type'          => 'yesno',
-                'description'   => lang('Setting allows you to reject any order where the country the IP is based from is considered a country where fraudulent order is likely.<br><b>NOTE: </b>Requires MaxMind'),
-                'value'         => '0',
-            ),
-            lang('MaxMind Fraud Risk Score')       => array(
-                'type'          => 'text',
-                'description'   => lang('MaxMind risk score is based on known risk factors and their likelihood to indicate possible fraud. Select the threshold you want ClientExec to reject on. ( 0=low risk 100=high risk)<br><b>NOTE:</b> Requires MaxMind<br>To see how the fraud score is obtained visit <br><a href=http://www.maxmind.com/en/riskscore?rId=clientexec target=_blank>http://www.maxmind.com/en/riskscore</a>'),
-                'value'         => 'none',
-            ),
-            lang('MaxMind Warning E-mail')       => array(
-                'type'          => 'textarea',
-                'description'   => lang('The E-mail address where a notification will be sent when the number of remaining queries reaches your MaxMind Low Query Threshold'),
-                'value'         => '',
-            ),
-            lang('MaxMind Low Query Threshold')       => array(
-                'type'          => 'text',
-                'description'   => lang('A notification E-mail will be sent when the number of remaining queries reaches this value.'),
-                'value'         => '10',
-            ),
-            lang('Show MaxMind Logo')       => array(
-                'type'          => 'yesno',
-                'description'   => lang('Setting this to YES will show the MaxMind fraud screening logo in the signup footer if credit card fraud detection or phone verification is turned on.'),
-                'value'         => '1',
-            ),
+            )
         );
 
         return $variables;
